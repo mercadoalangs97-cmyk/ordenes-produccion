@@ -399,19 +399,27 @@ function AdminAccounting() {
 // ── CONFIG ────────────────────────────────────────────────────────
 function AdminConfig() {
   const [origin, setOrigin] = useState({ name:"", phone:"", email:"", street:"", city:"", state:"", zip:"", country:"MX" });
+  const [geminiKey, setGeminiKey] = useState("");
   const [saved, setSaved]   = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(()=>{
     (async()=>{
-      const { data } = await supabase.from("settings").select("value").eq("key","origin_address").maybeSingle();
-      if (data?.value) try{ setOrigin(JSON.parse(data.value)); }catch(_){}
+      const [{ data:o },{ data:g }] = await Promise.all([
+        supabase.from("settings").select("value").eq("key","origin_address").maybeSingle(),
+        supabase.from("settings").select("value").eq("key","gemini_api_key").maybeSingle(),
+      ]);
+      if (o?.value) try{ setOrigin(JSON.parse(o.value)); }catch(_){}
+      if (g?.value) setGeminiKey(g.value);
       setLoading(false);
     })();
   },[]);
 
   async function save() {
-    await supabase.from("settings").upsert({ key:"origin_address", value:JSON.stringify(origin) });
+    await Promise.all([
+      supabase.from("settings").upsert({ key:"origin_address", value:JSON.stringify(origin) }),
+      supabase.from("settings").upsert({ key:"gemini_api_key", value:geminiKey }),
+    ]);
     setSaved(true); setTimeout(()=>setSaved(false),2000);
   }
 
@@ -420,7 +428,7 @@ function AdminConfig() {
   return (
     <div>
       <h1 style={{ fontSize:22, fontWeight:800, letterSpacing:-.5, marginBottom:6 }}>Configuración</h1>
-      <p style={{ color:"#6B6B8A", fontSize:13, marginBottom:20 }}>Datos de origen para generación de guías de envío con Skydropx.</p>
+      <p style={{ color:"#6B6B8A", fontSize:13, marginBottom:20 }}>Configuración general del sistema de órdenes de producción.</p>
 
       {loading ? <p style={{ color:"#888" }}>Cargando...</p> : (
         <div className="card" style={{ maxWidth:700 }}>
@@ -435,10 +443,29 @@ function AdminConfig() {
             <Field l="Código Postal"><input className="input-field" value={origin.zip} onChange={e=>set("zip",e.target.value)} /></Field>
             <Field l="País"><input className="input-field" value={origin.country} onChange={e=>set("country",e.target.value)} /></Field>
           </Grid>
+
+          <div style={{ marginTop:20, borderTop:"1px solid #E5E3F0", paddingTop:18 }}>
+            <h3 style={{ fontWeight:700, fontSize:13, color:"#2D2B55", textTransform:"uppercase", letterSpacing:.5, marginBottom:6 }}>✨ API Key de Gemini — Contratos con IA</h3>
+            <p style={{ fontSize:12, color:"#6B7280", marginBottom:10, lineHeight:1.5 }}>
+              Se guarda en la nube — todos los usuarios la reciben automáticamente sin configurar nada.
+              Obténla en <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style={{ color:"#7C3AED" }}>aistudio.google.com</a>
+            </p>
+            <input
+              className="input-field"
+              type="password"
+              placeholder="AIza..."
+              value={geminiKey}
+              onChange={e=>setGeminiKey(e.target.value)}
+              style={{ fontFamily:"monospace", maxWidth:500 }}
+            />
+          </div>
+
           {saved && <div style={{ background:"#D1FAE5", border:"1px solid #6EE7B7", color:"#065F46", borderRadius:8, padding:"8px 14px", marginTop:14, fontWeight:700, fontSize:13 }}>✓ Guardado</div>}
           <div style={{ marginTop:16 }}><button className="btn btn-primary" onClick={save}>Guardar configuración</button></div>
         </div>
       )}
     </div>
   );
+}
+
 }

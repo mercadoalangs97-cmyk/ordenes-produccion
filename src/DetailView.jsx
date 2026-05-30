@@ -39,7 +39,7 @@ export default function DetailView({ order, role, onEdit, onBack, onStatusChange
               {order.fechaEntrega && <div style={{ fontSize:12, color:"#6B6B8A" }}>Entrega: <b>{order.fechaEntrega}</b></div>}
               {role==="admin" && onStatusChange && (
                 <select value={order.status} onChange={e=>onStatusChange(order.id,e.target.value)} style={{ marginTop:6, padding:"3px 8px", borderRadius:8, border:"1px solid #E5E3F0", fontSize:12, cursor:"pointer" }}>
-                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Sucursal","Entregado","Cancelado"].map(s=><option key={s}>{s}</option>)}
+                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Almacén","Entregado","Cancelado"].map(s=><option key={s}>{s}</option>)}
                 </select>
               )}
             </div>

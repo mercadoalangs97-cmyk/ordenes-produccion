@@ -1,181 +1,299 @@
-import { useRef } from "react";
-import { STATUS_CONFIG, MATERIAL_STATUS, SHIPPING_STATUS } from "./helpers.js";
+import JSZip from "jszip";
 
-export const BASE_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#F8F7F4}
-input,select,textarea,button{font-family:inherit}
-button{cursor:pointer}
-::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
-.input-field{width:100%;padding:9px 12px;border:1.5px solid #E5E3F0;border-radius:9px;font-size:14px;background:white;outline:none;color:#1A1A2E;transition:border .15s}
-.input-field:focus{border-color:#4F46E5}
-.label{font-size:11px;font-weight:700;color:#6B6B8A;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;display:block}
-.btn{border:none;border-radius:10px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer;transition:all .15s}
-.btn-primary{background:#2D2B55;color:#fff}.btn-primary:hover{background:#3D3A72}
-.btn-outline{background:#fff;color:#2D2B55;border:1.5px solid #2D2B55}.btn-outline:hover{background:#F0EFF9}
-.btn-green{background:#059669;color:#fff;border:none}.btn-green:hover{background:#047857}
-.btn-red{background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer}
-.card{background:white;border:1.5px solid #E5E3F0;border-radius:14px;padding:22px}
-.hover-lift:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.07)}
-`;
+// ─── CONSTANTS ────────────────────────────────────────────────────
+export const TECHNIQUES = ["Serigrafía","Bordado","DTF / Vinil","Grabado Láser","Impresión Directa","Otra"];
 
-export function Section({ title, children, accent }) {
-  return (
-    <div style={{ background:"white", border:`1.5px solid ${accent||"#E5E3F0"}`, borderRadius:14, padding:22 }}>
-      <h3 style={{ fontWeight:700, fontSize:13, color:"#2D2B55", textTransform:"uppercase", letterSpacing:.5, marginBottom:16 }}>{title}</h3>
-      {children}
-    </div>
-  );
+export const STATUS_CONFIG = {
+  "Pendiente":             { color:"#D97706", bg:"#FEF3C7" },
+  "En Producción":         { color:"#2563EB", bg:"#DBEAFE" },
+  "Control de Calidad":    { color:"#7C3AED", bg:"#EDE9FE" },
+  "Terminado":             { color:"#059669", bg:"#D1FAE5" },
+  "Listo para Envío":      { color:"#0891B2", bg:"#CFFAFE" },
+  "Enviado":               { color:"#0F766E", bg:"#CCFBF1" },
+  "Entregado en Almacén":  { color:"#9333EA", bg:"#F3E8FF" },
+  "Entregado":             { color:"#6B7280", bg:"#F3F4F6" },
+  "Cancelado":             { color:"#DC2626", bg:"#FEE2E2" },
+};
+
+export const MATERIAL_STATUS = {
+  "por_comprar": { color:"#D97706", bg:"#FEF3C7", label:"Por comprar" },
+  "comprado":    { color:"#2563EB", bg:"#DBEAFE", label:"Comprado"    },
+  "en_bodega":   { color:"#059669", bg:"#D1FAE5", label:"En bodega"   },
+};
+
+export const SHIPPING_STATUS = {
+  "pendiente":          { color:"#D97706", bg:"#FEF3C7", label:"Pendiente"       },
+  "guia_generada":      { color:"#7C3AED", bg:"#EDE9FE", label:"Guía generada"   },
+  "enviado":            { color:"#0F766E", bg:"#CCFBF1", label:"Enviado"         },
+  "entregado_sucursal": { color:"#9333EA", bg:"#F3E8FF", label:"En Almacén"      },
+  "entregado":          { color:"#059669", bg:"#D1FAE5", label:"Entregado"       },
+};
+
+export const PURCHASE_DOC_TYPES = [
+  { value:"cotizacion_proveedor",   label:"Cotización proveedor" },
+  { value:"orden_compra",           label:"Orden de compra"      },
+  { value:"factura_proveedor",      label:"Factura proveedor"    },
+  { value:"comprobante_pago_prov",  label:"Comprobante de pago"  },
+];
+
+export const CLIENT_DOC_TYPES = [
+  { value:"cotizacion_cliente", label:"Cotización al cliente" },
+  { value:"factura_cliente",    label:"Factura emitida"       },
+  { value:"complemento_pago",   label:"Complemento de pago"   },
+  { value:"otro_cliente",       label:"Otro"                  },
+  { value:"contrato_compraventa", label:"Contrato de compraventa" },
+];
+
+// ─── DB CONVERTERS ────────────────────────────────────────────────
+export function orderToDb(order) {
+  return {
+    folio:           order.folio,
+    fecha:           order.fecha,
+    fecha_entrega:   order.fechaEntrega   || null,
+    cliente:         order.cliente,
+    empresa:         order.empresa,
+    telefono:        order.telefono,
+    email:           order.email,
+    client_dir_id:   order.clientDirId   || null,
+    client_dir_name: order.clientDirName || null,
+    worker_id:       order.workerId      || null,
+    productos:       order.productos,
+    logos:           order.logos,
+    notas_generales: order.notasGenerales,
+    status:          order.status,
+    creado_por:      order.creadoPor,
+    material_status: order.materialStatus || "por_comprar",
+    purchase_docs:   order.purchaseDocs  || [],
+    payment_anticipo:  order.paymentAnticipo  || {},
+    payment_finiquito: order.paymentFiniquito || {},
+    client_docs:     order.clientDocs    || [],
+    shipping:        order.shipping      || {},
+    supplier_docs:   order.supplierDocs  || [],
+  };
 }
 
-export function Grid({ cols=2, children }) {
-  return <div style={{ display:"grid", gridTemplateColumns:`repeat(${cols},1fr)`, gap:12 }}>{children}</div>;
+export function dbToOrder(row) {
+  const defAnticipo  = { paid:false, amount:"", date:"", file:null };
+  const defFiniquito = { paid:false, amount:"", date:"", file:null };
+  const defShipping  = { status:"pendiente", recipientName:"", recipientPhone:"", recipientEmail:"", recipientStreet:"", recipientCity:"", recipientState:"", recipientZip:"", recipientCountry:"MX", boxLength:"", boxWidth:"", boxHeight:"", boxWeight:"", carrier:"", service:"", trackingNumber:"", guideFile:null, skydropxShipmentId:null, labelUrl:null, quotes:[], selectedQuote:null };
+  return {
+    id:              row.id,
+    folio:           row.folio           || "",
+    fecha:           row.fecha           || new Date().toISOString().split("T")[0],
+    fechaEntrega:    row.fecha_entrega   || "",
+    cliente:         row.cliente         || "",
+    empresa:         row.empresa         || "",
+    telefono:        row.telefono        || "",
+    email:           row.email           || "",
+    clientDirId:     row.client_dir_id   || null,
+    clientDirName:   row.client_dir_name || "",
+    workerId:        row.worker_id       || null,
+    productos:       row.productos       || [],
+    logos:           row.logos           || [],
+    notasGenerales:  row.notas_generales || "",
+    status:          row.status          || "Pendiente",
+    creadoPor:       row.creado_por      || "",
+    materialStatus:  row.material_status || "por_comprar",
+    purchaseDocs:    row.purchase_docs   || [],
+    paymentAnticipo:  row.payment_anticipo  && Object.keys(row.payment_anticipo).length  ? row.payment_anticipo  : defAnticipo,
+    paymentFiniquito: row.payment_finiquito && Object.keys(row.payment_finiquito).length ? row.payment_finiquito : defFiniquito,
+    clientDocs:      row.client_docs     || [],
+    shipping:        row.shipping        && Object.keys(row.shipping).length ? { ...defShipping, ...row.shipping } : defShipping,
+    supplierDocs:    row.supplier_docs   || [],
+  };
 }
 
-export function Field({ l, children, style={} }) {
-  return <div style={style}><label className="label">{l}</label>{children}</div>;
+export function emptyOrder() {
+  return {
+    id: "new_" + Date.now(),
+    folio:"", fecha: new Date().toISOString().split("T")[0], fechaEntrega:"",
+    cliente:"", empresa:"", telefono:"", email:"",
+    clientDirId:null, clientDirName:"", workerId:null, creadoPor:"",
+    productos:[{ id:Date.now().toString(), descripcion:"", cantidad:"", talla:"", color:"", tecnica:"", posicion:"", coloresImpresion:"", notas:"", fotoProducto:null, mockup:null }],
+    logos:[], notasGenerales:"", status:"Pendiente",
+    materialStatus:"por_comprar", purchaseDocs:[],
+    paymentAnticipo:{ paid:false, amount:"", date:"", file:null },
+    paymentFiniquito:{ paid:false, amount:"", date:"", file:null },
+    clientDocs:[], supplierDocs:[],
+    shipping:{ status:"pendiente", recipientName:"", recipientPhone:"", recipientEmail:"", recipientStreet:"", recipientCity:"", recipientState:"", recipientZip:"", recipientCountry:"MX", boxLength:"", boxWidth:"", boxHeight:"", boxWeight:"", carrier:"", service:"", trackingNumber:"", guideFile:null, skydropxShipmentId:null, labelUrl:null, quotes:[], selectedQuote:null },
+  };
 }
 
-export function IR({ l, v }) {
-  if (!v) return null;
-  return <div><span style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.4 }}>{l}: </span><span style={{ fontSize:13, fontWeight:600, color:"#1A1A2E" }}>{v}</span></div>;
+// ─── FILE UTILITIES ───────────────────────────────────────────────
+export function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res({ name:file.name, type:file.type, size:file.size, data:r.result });
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
 }
 
-export function EmptyState({ icon, msg, sub }) {
-  return (
-    <div style={{ textAlign:"center", padding:"50px 20px", color:"#9CA3AF" }}>
-      <div style={{ fontSize:44, marginBottom:10 }}>{icon}</div>
-      <p style={{ fontWeight:700, fontSize:15 }}>{msg}</p>
-      <p style={{ fontSize:13, marginTop:4 }}>{sub}</p>
-    </div>
-  );
+export function downloadFile(file) {
+  const a = document.createElement("a");
+  a.href = file.data;
+  a.download = file.name;
+  a.click();
 }
 
-export function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || { color:"#6B7280", bg:"#F3F4F6" };
-  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.color}40`, borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:700, whiteSpace:"nowrap" }}>{status}</span>;
+export async function downloadZip(entries, zipName) {
+  const zip = new JSZip();
+  for (const { path, file } of entries) {
+    if (!file?.data) continue;
+    const base64 = file.data.split(",")[1];
+    if (base64) zip.file(path, base64, { base64:true });
+  }
+  const blob = await zip.generateAsync({ type:"blob" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = zipName;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-export function MaterialBadge({ status }) {
-  const cfg = MATERIAL_STATUS[status] || MATERIAL_STATUS.por_comprar;
-  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.color}40`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>{cfg.label}</span>;
+
+// ─── AI CONTRACT GENERATOR ────────────────────────────────────────
+export async function generateContract(order, geminiKey) {
+  const productos = (order.productos||[]).map((p,i)=>
+    `${i+1}. ${p.descripcion||"Producto"} — ${p.cantidad||0} pzas${p.talla?" / Talla: "+p.talla:""}${p.color?" / Color: "+p.color:""}${p.tecnica?" / Técnica: "+p.tecnica:""}`
+  ).join("\n");
+
+  const prompt = `Genera un contrato de compraventa profesional en español para una empresa de artículos promocionales con los siguientes datos:
+
+VENDEDOR: Promocionales GASCA
+CLIENTE: ${order.cliente||""}
+EMPRESA: ${order.empresa||""}
+RFC: (si está disponible)
+TELÉFONO: ${order.telefono||""}
+EMAIL: ${order.email||""}
+FECHA: ${order.fecha||new Date().toISOString().split("T")[0]}
+FOLIO DE ORDEN: ${order.folio||""}
+
+PRODUCTOS:
+${productos}
+
+PAGOS:
+- Anticipo: ${order.paymentAnticipo?.paid?"Pagado — $"+order.paymentAnticipo.amount:"Pendiente"}
+- Finiquito: ${order.paymentFiniquito?.paid?"Pagado — $"+order.paymentFiniquito.amount:"Pendiente al entregar"}
+
+El contrato debe incluir: datos de las partes, descripción de los productos y servicios, condiciones de pago, política de cambios (no aplican devoluciones una vez producido), fecha de entrega estimada, cláusula de propiedad intelectual del diseño, y firma de ambas partes. Formato profesional, máximo 1 página.`;
+
+  const r = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\${geminiKey}\`, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }], generationConfig:{ maxOutputTokens:1500, temperature:0.3 } })
+  });
+  const d = await r.json();
+  if(d.error) throw new Error(d.error.message);
+  return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-export function PaymentBadge({ anticipo, finiquito }) {
-  if (!anticipo?.paid && !finiquito?.paid) return null;
-  return (
-    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-      {anticipo?.paid && <span style={{ background:"#D1FAE5", color:"#059669", borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>💰 Anticipo</span>}
-      {finiquito?.paid && <span style={{ background:"#D1FAE5", color:"#059669", borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>💰 Finiquito</span>}
-    </div>
-  );
-}
-
-export function ShippingBadge({ status }) {
-  if (!status || status === "pendiente") return null;
-  const cfg = SHIPPING_STATUS[status] || SHIPPING_STATUS.pendiente;
-  return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.color}40`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>{cfg.label}</span>;
-}
-
-export function OrderCard({ order, onView, onEdit, onDelete, onStatusChange, canDelete=true }) {
+// ─── PDF EXPORT ───────────────────────────────────────────────────
+export function exportToPDF(order) {
   const total = order.productos?.reduce((a,p)=>a+(parseInt(p.cantidad)||0),0);
-  return (
-    <div className="hover-lift" onClick={()=>onView(order)}
-      style={{ background:"white", border:"1.5px solid #E5E3F0", borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"center", gap:12, cursor:"pointer", transition:"all .15s", marginBottom:8 }}>
-      <div style={{ minWidth:88 }}>
-        <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:12, color:"#2D2B55" }}>{order.folio}</div>
-        <div style={{ fontSize:10, color:"#9CA3AF", marginTop:1 }}>{order.fecha}</div>
-      </div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontWeight:700, fontSize:13, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{order.cliente||"—"}</div>
-        <div style={{ fontSize:11, color:"#6B6B8A", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{order.empresa}</div>
-        <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
-          <MaterialBadge status={order.materialStatus} />
-          <PaymentBadge anticipo={order.paymentAnticipo} finiquito={order.paymentFiniquito} />
-          <ShippingBadge status={order.shipping?.status} />
+  const sc    = STATUS_CONFIG[order.status] || { color:"#6B7280", bg:"#F3F4F6" };
+  const ms    = MATERIAL_STATUS[order.materialStatus] || MATERIAL_STATUS.por_comprar;
+  const ss    = SHIPPING_STATUS[order.shipping?.status] || SHIPPING_STATUS.pendiente;
+
+  const imgBlock = (label, img) => img
+    ? `<div style="margin-bottom:8px"><div style="font-size:9px;font-weight:700;color:#9CA3AF;text-transform:uppercase;margin-bottom:3px">${label}</div><img src="${img.data}" style="width:110px;height:80px;object-fit:contain;border:1px solid #eee;border-radius:6px"/></div>` : "";
+
+  const docList = (docs, types) => docs?.map(d => {
+    const t = types?.find(t=>t.value===d.docType);
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px">
+      ${d.type?.startsWith("image") ? `<img src="${d.data}" style="width:28px;height:28px;object-fit:contain;border-radius:4px"/>` : `<span style="font-size:16px">📄</span>`}
+      <span>${t?.label||d.docType||""} — ${d.name}</span>
+    </div>`;
+  }).join("") || "";
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Orden ${order.folio}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=DM+Mono:wght@500&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}body{font-family:'DM Sans',sans-serif;background:white;padding:28px;color:#1A1A2E;font-size:12px}
+    @page{size:A4;margin:15mm}@media print{.no-print{display:none!important}}
+    h3{font-size:12px;font-weight:700;color:#2D2B55;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+    .badge{border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700;display:inline-block}
+    .section{border:1px solid #E5E3F0;border-radius:8px;padding:12px;margin-bottom:12px;page-break-inside:avoid}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .lbl{font-size:9px;font-weight:700;color:#9CA3AF;text-transform:uppercase}
+    .val{font-size:12px;font-weight:600;color:#1A1A2E}
+  </style></head><body>
+  <div class="no-print" style="margin-bottom:16px">
+    <button onclick="window.print()" style="background:#2D2B55;color:white;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">🖨 Guardar como PDF</button>
+    <span style="font-size:11px;color:#9CA3AF;margin-left:10px">Selecciona "Guardar como PDF" en el diálogo de impresión</span>
+  </div>
+
+  <div style="border-bottom:3px solid #2D2B55;padding-bottom:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1 style="font-size:22px;font-weight:900;color:#2D2B55;letter-spacing:-1px">ORDEN DE PRODUCCIÓN</h1>
+      <div style="font-family:'DM Mono',monospace;font-size:16px;font-weight:700;color:#7C3AED;margin-top:2px">${order.folio}</div>
+    </div>
+    <div style="text-align:right">
+      <span class="badge" style="background:${sc.bg};color:${sc.color}">${order.status}</span>
+      <div style="font-size:11px;color:#6B6B8A;margin-top:6px">Orden: <b>${order.fecha}</b></div>
+      ${order.fechaEntrega?`<div style="font-size:11px;color:#6B6B8A">Entrega: <b>${order.fechaEntrega}</b></div>`:""}
+    </div>
+  </div>
+
+  <div class="section grid2" style="margin-bottom:12px">
+    ${[["Cliente",order.cliente],["Empresa",order.empresa],["Teléfono",order.telefono],["Email",order.email],["Responsable",order.creadoPor]].filter(([,v])=>v).map(([l,v])=>`<div><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("")}
+  </div>
+
+  <h3>📦 Productos — ${total} pzas</h3>
+  ${(order.productos||[]).map((p,i)=>`
+    <div class="section" style="display:flex;gap:14px">
+      <div style="min-width:110px">${imgBlock("Foto",p.fotoProducto)}${imgBlock("Mockup",p.mockup)}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px">${p.descripcion||"Producto "+(i+1)}</div>
+        <div class="grid2">
+          ${[["Cantidad",p.cantidad?p.cantidad+" pzas":""],["Talla",p.talla],["Color",p.color],["Técnica",p.tecnica],["Posición",p.posicion],["Colores",p.coloresImpresion]].filter(([,v])=>v).map(([l,v])=>`<div><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("")}
+          ${p.notas?`<div style="grid-column:span 2"><div class="lbl">Notas</div><div class="val">${p.notas}</div></div>`:""}
         </div>
       </div>
-      <div style={{ minWidth:50, textAlign:"center" }}>
-        <div style={{ fontWeight:800, fontSize:16, color:"#2D2B55" }}>{total}</div>
-        <div style={{ fontSize:9, color:"#9CA3AF", textTransform:"uppercase" }}>pzas</div>
-      </div>
-      {order.fechaEntrega && <div style={{ fontSize:11, color:"#6B6B8A", minWidth:72 }}>📅 {order.fechaEntrega}</div>}
-      <div onClick={e=>e.stopPropagation()} style={{ minWidth:155 }}>
-        <select value={order.status} onChange={e=>onStatusChange(order.id,e.target.value)}
-          style={{ padding:"3px 8px", borderRadius:20, border:`1.5px solid ${STATUS_CONFIG[order.status]?.color||"#ccc"}40`,
-            background:STATUS_CONFIG[order.status]?.bg, color:STATUS_CONFIG[order.status]?.color,
-            fontWeight:700, fontSize:10, cursor:"pointer", outline:"none" }}>
-          {Object.keys(STATUS_CONFIG).map(s=><option key={s}>{s}</option>)}
-        </select>
-      </div>
-      <div onClick={e=>e.stopPropagation()} style={{ display:"flex", gap:4 }}>
-        <button onClick={()=>onEdit(order)} style={{ background:"#F0EFF9", border:"none", borderRadius:8, padding:"4px 9px", fontSize:12, color:"#2D2B55", fontWeight:700, cursor:"pointer" }}>✏️</button>
-        {canDelete && <button className="btn-red" onClick={()=>onDelete(order.id)}>🗑</button>}
-      </div>
+    </div>`).join("")}
+
+  ${(order.purchaseDocs?.length||order.materialStatus)?`
+  <h3>🛒 Materiales</h3>
+  <div class="section">
+    <span class="badge" style="background:${ms.bg};color:${ms.color};margin-bottom:8px;display:inline-block">${ms.label}</span>
+    ${docList(order.purchaseDocs, PURCHASE_DOC_TYPES)}
+  </div>`:""}
+
+  ${(order.paymentAnticipo?.paid||order.paymentFiniquito?.paid)?`
+  <h3>💰 Pagos</h3>
+  <div class="section grid2">
+    ${order.paymentAnticipo?.paid?`<div><div class="lbl">Anticipo</div><div class="val" style="color:#059669">✓ Pagado${order.paymentAnticipo.amount?" — $"+order.paymentAnticipo.amount:""}</div><div style="font-size:10px;color:#6B6B8A">${order.paymentAnticipo.date||""}</div></div>`:""}
+    ${order.paymentFiniquito?.paid?`<div><div class="lbl">Finiquito</div><div class="val" style="color:#059669">✓ Pagado${order.paymentFiniquito.amount?" — $"+order.paymentFiniquito.amount:""}</div><div style="font-size:10px;color:#6B6B8A">${order.paymentFiniquito.date||""}</div></div>`:""}
+  </div>`:""}
+
+  ${order.clientDocs?.length?`
+  <h3>🧾 Docs del Cliente</h3>
+  <div class="section">${docList(order.clientDocs, CLIENT_DOC_TYPES)}</div>`:""}
+
+  ${order.shipping?.trackingNumber||order.shipping?.carrier?`
+  <h3>📦 Envío</h3>
+  <div class="section">
+    <span class="badge" style="background:${ss.bg};color:${ss.color};margin-bottom:8px;display:inline-block">${ss.label}</span>
+    <div class="grid2" style="margin-top:6px">
+      ${order.shipping.recipientName?`<div><div class="lbl">Destinatario</div><div class="val">${order.shipping.recipientName}</div></div>`:""}
+      ${order.shipping.recipientCity?`<div><div class="lbl">Ciudad</div><div class="val">${order.shipping.recipientCity}, ${order.shipping.recipientState}</div></div>`:""}
+      ${order.shipping.carrier?`<div><div class="lbl">Carrier</div><div class="val">${order.shipping.carrier}</div></div>`:""}
+      ${order.shipping.trackingNumber?`<div><div class="lbl">N° Guía</div><div class="val" style="font-family:monospace">${order.shipping.trackingNumber}</div></div>`:""}
     </div>
-  );
-}
+  </div>`:""}
 
-export function ImageUpload({ label, image, onChange, onRemove }) {
-  const ref = useRef();
-  return (
-    <div>
-      <label className="label">{label}</label>
-      {image
-        ? <div style={{ position:"relative", display:"inline-block", width:"100%" }}>
-            <img src={image.data} alt="" style={{ width:"100%", maxHeight:120, objectFit:"contain", borderRadius:10, border:"1.5px solid #E5E3F0", background:"#fafafa" }} />
-            <button onClick={onRemove} style={{ position:"absolute", top:6, right:6, background:"#DC2626", color:"white", border:"none", borderRadius:"50%", width:20, height:20, fontSize:12, fontWeight:700, lineHeight:1, cursor:"pointer" }}>×</button>
-          </div>
-        : <>
-            <input ref={ref} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>onChange(e.target.files[0])} />
-            <div onClick={()=>ref.current?.click()}
-              style={{ border:"2px dashed #E5E3F0", borderRadius:10, padding:"16px 10px", textAlign:"center", cursor:"pointer", color:"#9CA3AF", fontSize:12, background:"#FAFAFA" }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor="#A78BFA"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor="#E5E3F0"}>
-              <div style={{ fontSize:20, marginBottom:2 }}>📁</div>
-              <div style={{ fontWeight:600, fontSize:11 }}>Subir imagen</div>
-            </div>
-          </>
-      }
-    </div>
-  );
-}
+  ${order.notasGenerales?`
+  <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:8px;padding:12px;margin-top:12px">
+    <div style="font-weight:700;font-size:11px;color:#92400E;margin-bottom:4px">📝 NOTAS GENERALES</div>
+    <p style="font-size:12px;color:#78350F;line-height:1.5">${order.notasGenerales}</p>
+  </div>`:""}
 
-export function FileUploadBtn({ label, accept="image/*,.pdf,.ai,.eps,.svg,.cdr,.xml", onFiles, multiple=false }) {
-  const ref = useRef();
-  return (
-    <>
-      <input ref={ref} type="file" multiple={multiple} accept={accept} style={{ display:"none" }} onChange={e=>onFiles(e.target.files)} />
-      <button className="btn btn-outline" onClick={()=>ref.current?.click()} style={{ fontSize:13, padding:"7px 14px" }}>{label}</button>
-    </>
-  );
-}
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:32px;padding-top:14px;border-top:1px solid #E5E3F0">
+    ${["Elaboró","Revisó","Autorizó"].map(l=>`<div style="text-align:center"><div style="border-top:1.5px solid #2D2B55;padding-top:7px;font-size:10px;color:#6B6B8A;font-weight:700;text-transform:uppercase;letter-spacing:.5px">${l}</div></div>`).join("")}
+  </div>
+  </body></html>`;
 
-export function DocsList({ docs, docTypes, onRemove, onDownload }) {
-  if (!docs?.length) return <p style={{ fontSize:12, color:"#9CA3AF" }}>Sin archivos adjuntos</p>;
-  return (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-      {docs.map((doc,i)=>{
-        const t = docTypes?.find(t=>t.value===doc.docType);
-        return (
-          <div key={i} style={{ background:"#F0EFF9", border:"1.5px solid #E5E3F0", borderRadius:10, padding:"8px 10px", display:"flex", flexDirection:"column", alignItems:"center", gap:4, width:100 }}>
-            {doc.type?.startsWith("image")
-              ? <img src={doc.data} alt="" style={{ width:52, height:52, objectFit:"contain", borderRadius:6 }} />
-              : <div style={{ width:52, height:52, background:"#DDD6FE", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>📄</div>}
-            <div style={{ fontSize:9, textAlign:"center", color:"#4C4A8A", fontWeight:600, wordBreak:"break-all", lineHeight:1.2 }}>{t?.label||doc.name}</div>
-            <div style={{ display:"flex", gap:3 }}>
-              <button onClick={()=>onDownload(doc)} style={{ background:"#2D2B55", color:"white", border:"none", borderRadius:5, padding:"2px 6px", fontSize:9, fontWeight:700, cursor:"pointer" }}>⬇</button>
-              {onRemove && <button onClick={()=>onRemove(i)} style={{ background:"#FEE2E2", color:"#DC2626", border:"none", borderRadius:5, padding:"2px 6px", fontSize:9, fontWeight:700, cursor:"pointer" }}>×</button>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-export function Toast({ msg }) {
-  if (!msg) return null;
-  return <div style={{ background:"#D1FAE5", border:"1px solid #6EE7B7", color:"#065F46", borderRadius:10, padding:"9px 16px", marginBottom:14, fontWeight:700, fontSize:13 }}>{msg}</div>;
+  const w = window.open("","_blank","width=900,height=700");
+  w.document.write(html);
+  w.document.close();
 }

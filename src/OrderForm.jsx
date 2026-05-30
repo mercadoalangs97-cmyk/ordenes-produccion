@@ -2,12 +2,15 @@ import { useState, useRef, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { fileToBase64, TECHNIQUES, MATERIAL_STATUS, SHIPPING_STATUS, PURCHASE_DOC_TYPES, CLIENT_DOC_TYPES } from "./helpers.js";
 import { Section, Grid, Field, ImageUpload, FileUploadBtn, DocsList } from "./ui.jsx";
+import { generateContract } from "./helpers.js";
 
 export default function OrderForm({ order, role, worker, onSave, onCancel }) {
   const [form, setForm] = useState(order);
   const [tab, setTab]   = useState("general");
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState([]);
+  const [generatingContract, setGeneratingContract] = useState(false);
+  const [geminiKey, setGeminiKey] = useState(()=>localStorage.getItem("gk_orders")||"");
 
   const isAdmin   = role === "admin";
   const isVentas  = role === "ventas";
@@ -127,14 +130,14 @@ export default function OrderForm({ order, role, worker, onSave, onCancel }) {
               <Field l="Responsable"><input className="input-field" value={form.creadoPor} onChange={e=>set("creadoPor",e.target.value)} /></Field>
               <Field l="Estatus">
                 <select className="input-field" value={form.status} onChange={e=>set("status",e.target.value)}>
-                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Sucursal","Entregado","Cancelado"].map(s=><option key={s}>{s}</option>)}
+                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Almacén","Entregado","Cancelado"].map(s=><option key={s}>{s}</option>)}
                 </select>
               </Field>
             </>}
             {isProd && (
               <Field l="Estatus">
                 <select className="input-field" value={form.status} onChange={e=>set("status",e.target.value)}>
-                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Sucursal","Entregado"].map(s=><option key={s}>{s}</option>)}
+                  {["Pendiente","En Producción","Control de Calidad","Terminado","Listo para Envío","Enviado","Entregado en Almacén","Entregado"].map(s=><option key={s}>{s}</option>)}
                 </select>
               </Field>
             )}
@@ -263,6 +266,44 @@ export default function OrderForm({ order, role, worker, onSave, onCancel }) {
             {CLIENT_DOC_TYPES.map(dt=>(
               <FileUploadBtn key={dt.value} label={`+ ${dt.label}`} multiple onFiles={files=>addDocs("clientDocs",files,dt.value)} />
             ))}
+          </div>
+
+          {/* AI Contract Generator */}
+          <div style={{ marginTop:20, background:"linear-gradient(135deg,#EDE9FE,#E0E7FF)", border:"1.5px solid #A78BFA", borderRadius:14, padding:18 }}>
+            <div style={{ fontWeight:700, fontSize:14, color:"#4C1D95", marginBottom:4 }}>✨ Generar Contrato de Compraventa con IA</div>
+            <p style={{ fontSize:12, color:"#5B21B6", marginBottom:12, lineHeight:1.5 }}>Genera automáticamente un contrato profesional con los datos del cliente y los productos de esta orden.</p>
+            <div style={{ marginBottom:10 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:"#6D28D9", textTransform:"uppercase", letterSpacing:.5 }}>API Key de Gemini (aistudio.google.com)</label>
+              <input
+                style={{ width:"100%", padding:"8px 11px", border:"1.5px solid #A78BFA", borderRadius:8, fontSize:13, marginTop:4, fontFamily:"monospace", background:"#FAF8FF" }}
+                type="password" placeholder="AIza..."
+                value={geminiKey}
+                onChange={e=>{ setGeminiKey(e.target.value); localStorage.setItem("gk_orders",e.target.value); }}
+              />
+            </div>
+            <button
+              onClick={async()=>{
+                if(!geminiKey){ alert("Ingresa tu API Key de Gemini primero."); return; }
+                setGeneratingContract(true);
+                try{
+                  const text = await generateContract(form, geminiKey);
+                  if(!text){ alert("No se pudo generar el contrato. Intenta de nuevo."); setGeneratingContract(false); return; }
+                  // Save as a text file in clientDocs
+                  const blob = new Blob([text],{type:"text/plain"});
+                  const reader = new FileReader();
+                  reader.onload = e=>{
+                    const doc = { name:`Contrato_${form.folio||"orden"}_${new Date().toISOString().split("T")[0]}.txt`, type:"text/plain", size:blob.size, data:e.target.result, docType:"contrato_compraventa" };
+                    set("clientDocs",[...(form.clientDocs||[]),doc]);
+                  };
+                  reader.readAsDataURL(blob);
+                  alert("✅ Contrato generado y agregado a los documentos del cliente.");
+                }catch(err){ alert("Error al generar: "+err.message); }
+                setGeneratingContract(false);
+              }}
+              disabled={generatingContract}
+              style={{ background:"#7C3AED", color:"white", border:"none", borderRadius:9, padding:"9px 20px", fontWeight:700, fontSize:13, cursor:"pointer", opacity:generatingContract?.6:1, width:"100%" }}>
+              {generatingContract?"✨ Generando contrato...":"✨ Generar contrato con IA"}
+            </button>
           </div>
         </Section>
       )}

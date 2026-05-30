@@ -155,36 +155,51 @@ export async function downloadZip(entries, zipName) {
 
 // ─── AI CONTRACT GENERATOR ────────────────────────────────────────
 export async function generateContract(order, geminiKey) {
-  const productos = (order.productos||[]).map((p,i)=>
-    `${i+1}. ${p.descripcion||"Producto"} — ${p.cantidad||0} pzas${p.talla?" / Talla: "+p.talla:""}${p.color?" / Color: "+p.color:""}${p.tecnica?" / Técnica: "+p.tecnica:""}`
-  ).join("\n");
+  const prods = (order.productos||[]).map((p,i) => {
+    const parts = [p.descripcion||"Producto", (p.cantidad||0)+" pzas"];
+    if(p.talla) parts.push("Talla: "+p.talla);
+    if(p.color) parts.push("Color: "+p.color);
+    if(p.tecnica) parts.push("Técnica: "+p.tecnica);
+    return (i+1)+". "+parts.join(" / ");
+  }).join("\n");
 
-  const prompt = `Genera un contrato de compraventa profesional en español para una empresa de artículos promocionales con los siguientes datos:
+  const anticipo  = order.paymentAnticipo?.paid  ? "Pagado — $"+order.paymentAnticipo.amount  : "Pendiente";
+  const finiquito = order.paymentFiniquito?.paid ? "Pagado — $"+order.paymentFiniquito.amount : "Pendiente al entregar";
 
-VENDEDOR: Promocionales GASCA
-CLIENTE: ${order.cliente||""}
-EMPRESA: ${order.empresa||""}
-RFC: (si está disponible)
-TELÉFONO: ${order.telefono||""}
-EMAIL: ${order.email||""}
-FECHA: ${order.fecha||new Date().toISOString().split("T")[0]}
-FOLIO DE ORDEN: ${order.folio||""}
+  const prompt = [
+    "Genera un contrato de compraventa profesional en español para una empresa de artículos promocionales.",
+    "",
+    "VENDEDOR: Promocionales GASCA",
+    "CLIENTE: "+(order.cliente||""),
+    "EMPRESA: "+(order.empresa||""),
+    "TELÉFONO: "+(order.telefono||""),
+    "EMAIL: "+(order.email||""),
+    "FECHA: "+(order.fecha||new Date().toISOString().split("T")[0]),
+    "FOLIO: "+(order.folio||""),
+    "",
+    "PRODUCTOS:",
+    prods,
+    "",
+    "PAGOS:",
+    "- Anticipo: "+anticipo,
+    "- Finiquito: "+finiquito,
+    "",
+    "El contrato debe incluir: datos de las partes, descripción de productos y servicios, condiciones de pago,",
+    "política de no devoluciones una vez producido, fecha de entrega estimada, cláusula de propiedad intelectual,",
+    "y espacio para firma de ambas partes. Formato profesional, máximo 1 página.",
+  ].join("\n");
 
-PRODUCTOS:
-${productos}
-
-PAGOS:
-- Anticipo: ${order.paymentAnticipo?.paid?"Pagado — $"+order.paymentAnticipo.amount:"Pendiente"}
-- Finiquito: ${order.paymentFiniquito?.paid?"Pagado — $"+order.paymentFiniquito.amount:"Pendiente al entregar"}
-
-El contrato debe incluir: datos de las partes, descripción de los productos y servicios, condiciones de pago, política de cambios (no aplican devoluciones una vez producido), fecha de entrega estimada, cláusula de propiedad intelectual del diseño, y firma de ambas partes. Formato profesional, máximo 1 página.`;
-
-  const r = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\${geminiKey}\`, {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }], generationConfig:{ maxOutputTokens:1500, temperature:0.3 } })
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + geminiKey;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 1500, temperature: 0.3 }
+    })
   });
   const d = await r.json();
-  if(d.error) throw new Error(d.error.message);
+  if (d.error) throw new Error(d.error.message);
   return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 

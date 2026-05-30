@@ -285,20 +285,34 @@ export default function OrderForm({ order, role, worker, onSave, onCancel }) {
             )}
             <button
               onClick={async()=>{
-                if(!geminiKey){ alert("Ingresa tu API Key de Gemini primero."); return; }
+                if(!geminiKey){ alert("La API Key de Gemini no está configurada. Pide al administrador que la configure en ⚙️ Configuración."); return; }
                 setGeneratingContract(true);
                 try{
                   const text = await generateContract(form, geminiKey);
                   if(!text){ alert("No se pudo generar el contrato. Intenta de nuevo."); setGeneratingContract(false); return; }
-                  // Save as a text file in clientDocs
-                  const blob = new Blob([text],{type:"text/plain"});
-                  const reader = new FileReader();
-                  reader.onload = e=>{
-                    const doc = { name:`Contrato_${form.folio||"orden"}_${new Date().toISOString().split("T")[0]}.txt`, type:"text/plain", size:blob.size, data:e.target.result, docType:"contrato_compraventa" };
-                    set("clientDocs",[...(form.clientDocs||[]),doc]);
-                  };
-                  reader.readAsDataURL(blob);
-                  alert("✅ Contrato generado y agregado a los documentos del cliente.");
+                  // Open as printable HTML (user can Save as PDF or copy to Word)
+                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+                    <title>Contrato — ${form.folio||"orden"}</title>
+                    <style>
+                      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
+                      *{box-sizing:border-box;margin:0;padding:0}
+                      body{font-family:'DM Sans',Arial,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#1A1A2E;font-size:13px;line-height:1.7}
+                      h1{font-size:18px;font-weight:800;text-align:center;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+                      p{margin-bottom:10px;text-align:justify}
+                      pre{white-space:pre-wrap;font-family:inherit;font-size:13px}
+                      .no-print{margin-bottom:20px;display:flex;gap:10px}
+                      @media print{.no-print{display:none}}
+                    </style></head><body>
+                    <div class="no-print">
+                      <button onclick="window.print()" style="background:#2D2B55;color:white;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">🖨 Guardar como PDF</button>
+                      <button onclick="navigator.clipboard.writeText(document.getElementById('ct').innerText)" style="background:#F0F2F8;color:#2D2B55;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer">📋 Copiar para Word</button>
+                    </div>
+                    <pre id="ct">${text.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre>
+                    </body></html>`;
+                  const w = window.open("","_blank","width=860,height=700");
+                  w.document.write(html);
+                  w.document.close();
+                  alert("✅ Contrato generado.\n\n• Clic en '🖨 Guardar como PDF' para descargarlo como PDF\n• Clic en '📋 Copiar para Word' y pégalo en Word para editarlo");
                 }catch(err){ alert("Error al generar: "+err.message); }
                 setGeneratingContract(false);
               }}

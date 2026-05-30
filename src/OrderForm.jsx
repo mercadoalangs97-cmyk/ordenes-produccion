@@ -10,7 +10,13 @@ export default function OrderForm({ order, role, worker, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState([]);
   const [generatingContract, setGeneratingContract] = useState(false);
-  const [geminiKey, setGeminiKey] = useState(()=>localStorage.getItem("gk_orders")||"");
+  const [geminiKey, setGeminiKey] = useState("")
+  
+  useEffect(()=>{
+    // Load shared Gemini key from Supabase (set by admin once, works for all)
+    supabase.from("settings").select("value").eq("key","gemini_api_key").maybeSingle()
+      .then(({data})=>{ if(data?.value) setGeminiKey(data.value); });
+  },[]);
 
   const isAdmin   = role === "admin";
   const isVentas  = role === "ventas";
@@ -272,15 +278,11 @@ export default function OrderForm({ order, role, worker, onSave, onCancel }) {
           <div style={{ marginTop:20, background:"linear-gradient(135deg,#EDE9FE,#E0E7FF)", border:"1.5px solid #A78BFA", borderRadius:14, padding:18 }}>
             <div style={{ fontWeight:700, fontSize:14, color:"#4C1D95", marginBottom:4 }}>✨ Generar Contrato de Compraventa con IA</div>
             <p style={{ fontSize:12, color:"#5B21B6", marginBottom:12, lineHeight:1.5 }}>Genera automáticamente un contrato profesional con los datos del cliente y los productos de esta orden.</p>
-            <div style={{ marginBottom:10 }}>
-              <label style={{ fontSize:11, fontWeight:700, color:"#6D28D9", textTransform:"uppercase", letterSpacing:.5 }}>API Key de Gemini (aistudio.google.com)</label>
-              <input
-                style={{ width:"100%", padding:"8px 11px", border:"1.5px solid #A78BFA", borderRadius:8, fontSize:13, marginTop:4, fontFamily:"monospace", background:"#FAF8FF" }}
-                type="password" placeholder="AIza..."
-                value={geminiKey}
-                onChange={e=>{ setGeminiKey(e.target.value); localStorage.setItem("gk_orders",e.target.value); }}
-              />
-            </div>
+            {!geminiKey && (
+              <div style={{ background:"#FEF3C7", border:"1px solid #FCD34D", borderRadius:8, padding:"8px 12px", marginBottom:10, fontSize:12, color:"#92400E" }}>
+                ⚠ La API Key no está configurada. Pide al administrador que la configure en <strong>Configuración → API Key de Gemini</strong>.
+              </div>
+            )}
             <button
               onClick={async()=>{
                 if(!geminiKey){ alert("Ingresa tu API Key de Gemini primero."); return; }

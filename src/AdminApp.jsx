@@ -467,5 +467,3 @@ function AdminConfig() {
     </div>
   );
 }
-
-}
